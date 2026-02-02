@@ -26,6 +26,8 @@ export class AgentInterface extends LitElement {
 	@property({ type: Boolean }) showThemeToggle = false;
 	// Optional custom API key prompt handler - if not provided, uses default dialog
 	@property({ attribute: false }) onApiKeyRequired?: (provider: string) => Promise<boolean>;
+	// Optional custom credentials check - if not provided, checks providerKeys store
+	@property({ attribute: false }) hasCredentials?: (provider: string) => Promise<boolean>;
 	// Optional callback called before sending a message
 	@property({ attribute: false }) onBeforeSend?: () => void | Promise<void>;
 	// Optional callback called before executing a tool call - return false to prevent execution
@@ -209,12 +211,14 @@ export class AgentInterface extends LitElement {
 		if (!session) throw new Error("No session set on AgentInterface");
 		if (!session.state.model) throw new Error("No model set on AgentInterface");
 
-		// Check if API key exists for the provider (only needed in direct mode)
+		// Check if credentials exist for the provider (only needed in direct mode)
 		const provider = session.state.model.provider;
-		const apiKey = await getAppStorage().providerKeys.get(provider);
+		const hasCreds = this.hasCredentials
+			? await this.hasCredentials(provider)
+			: !!(await getAppStorage().providerKeys.get(provider));
 
-		// If no API key, prompt for it
-		if (!apiKey) {
+		// If no credentials, prompt for them
+		if (!hasCreds) {
 			if (!this.onApiKeyRequired) {
 				console.error("No API key configured and no onApiKeyRequired handler set");
 				return;
