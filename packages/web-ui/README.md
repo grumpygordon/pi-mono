@@ -1,5 +1,7 @@
 # @mariozechner/pi-web-ui
 
+> **Fix:** Replaced `tsgo` with `tsc` in build script — `tsgo` ignores `useDefineForClassFields: false`, breaking Lit reactive properties.
+
 Reusable web UI components for building AI chat interfaces powered by [@mariozechner/pi-ai](../ai) and [@mariozechner/pi-agent-core](../agent).
 
 Built with [mini-lit](https://github.com/badlogic/mini-lit) web components and Tailwind CSS v4.
