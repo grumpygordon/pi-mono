@@ -4,12 +4,19 @@ import "./extract-document.js"; // Auto-registers the renderer
 import { getToolRenderer, registerToolRenderer } from "./renderer-registry.js";
 import { BashRenderer } from "./renderers/BashRenderer.js";
 import { DefaultRenderer } from "./renderers/DefaultRenderer.js";
-import type { ToolRenderResult } from "./types.js";
+import type { ToolRenderer, ToolRenderResult } from "./types.js";
 
 // Register all built-in tool renderers
 registerToolRenderer("bash", new BashRenderer());
 
-const defaultRenderer = new DefaultRenderer();
+let defaultRenderer: ToolRenderer = new DefaultRenderer();
+
+/**
+ * Set a custom default renderer for tools without a registered renderer
+ */
+export function setDefaultRenderer(renderer: ToolRenderer): void {
+	defaultRenderer = renderer;
+}
 
 // Global flag to force default JSON rendering for all tools
 let showJsonMode = false;
@@ -33,14 +40,14 @@ export function renderTool(
 ): ToolRenderResult {
 	// If showJsonMode is enabled, always use the default renderer
 	if (showJsonMode) {
-		return defaultRenderer.render(params, result, isStreaming);
+		return defaultRenderer.render(params, result, isStreaming, toolName);
 	}
 
 	const renderer = getToolRenderer(toolName);
 	if (renderer) {
-		return renderer.render(params, result, isStreaming);
+		return renderer.render(params, result, isStreaming, toolName);
 	}
-	return defaultRenderer.render(params, result, isStreaming);
+	return defaultRenderer.render(params, result, isStreaming, toolName);
 }
 
 export { getToolRenderer, registerToolRenderer };
