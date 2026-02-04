@@ -14,7 +14,18 @@ export class DefaultRenderer implements ToolRenderer {
 		toolName?: string,
 	): ToolRenderResult {
 		const state = result ? (result.isError ? "error" : "complete") : isStreaming ? "inprogress" : "complete";
-		const displayName = toolName || "Tool Call";
+
+		// Extract description from params if available
+		let parsedParams: any = null;
+		if (params) {
+			try {
+				parsedParams = typeof params === "string" ? JSON.parse(params) : params;
+			} catch {
+				// ignore parse errors
+			}
+		}
+		const paramDescription = parsedParams?.description;
+		const displayName = paramDescription ? `${toolName}: ${paramDescription}` : toolName || "Tool Call";
 
 		// Format params as JSON
 		let paramsJson = "";
