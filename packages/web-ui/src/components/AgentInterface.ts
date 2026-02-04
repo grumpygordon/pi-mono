@@ -153,10 +153,17 @@ export class AgentInterface extends LitElement {
 		this._unsubscribeSession = this.session.subscribe(async (ev: AgentEvent) => {
 			switch (ev.type) {
 				case "message_start":
-				case "message_end":
 				case "turn_start":
 				case "turn_end":
 				case "agent_start":
+				case "tool_execution_start":
+				case "tool_execution_end":
+					this.requestUpdate();
+					break;
+				case "message_end":
+					if (this._streamingContainer && ev.message.role === "assistant") {
+						this._streamingContainer.setMessage(null, true);
+					}
 					this.requestUpdate();
 					break;
 				case "agent_end":
