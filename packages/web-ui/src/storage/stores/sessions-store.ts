@@ -28,9 +28,26 @@ export class SessionsStore extends Store {
 	}
 
 	async save(data: SessionData, metadata: SessionMetadata): Promise<void> {
+		const now = new Date().toISOString();
+
 		await this.getBackend().transaction(["sessions", "sessions-metadata"], "readwrite", async (tx) => {
-			await tx.set("sessions", data.id, data);
-			await tx.set("sessions-metadata", metadata.id, metadata);
+			const existing = await tx.get<SessionData>("sessions", data.id);
+			const existingMeta = await tx.get<SessionMetadata>("sessions-metadata", metadata.id);
+
+			const finalData: SessionData = {
+				...data,
+				createdAt: existing?.createdAt ?? data.createdAt ?? now,
+				lastModified: now,
+			};
+
+			const finalMeta: SessionMetadata = {
+				...metadata,
+				createdAt: existingMeta?.createdAt ?? metadata.createdAt ?? now,
+				lastModified: now,
+			};
+
+			await tx.set("sessions", finalData.id, finalData);
+			await tx.set("sessions-metadata", finalMeta.id, finalMeta);
 		});
 	}
 
