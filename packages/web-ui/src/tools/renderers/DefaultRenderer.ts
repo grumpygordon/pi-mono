@@ -13,7 +13,13 @@ export class DefaultRenderer implements ToolRenderer {
 		isStreaming?: boolean,
 		toolName?: string,
 	): ToolRenderResult {
-		const state = result ? (result.isError ? "error" : "complete") : isStreaming ? "inprogress" : "complete";
+		const state = result
+			? result.isError || result.details?.isError
+				? "error"
+				: "complete"
+			: isStreaming
+				? "inprogress"
+				: "complete";
 
 		// Extract description from params if available
 		let parsedParams: any = null;
