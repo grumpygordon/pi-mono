@@ -1,5 +1,5 @@
 import { streamSimple, type ToolResultMessage, type Usage } from "@mariozechner/pi-ai";
-import { html, LitElement } from "lit";
+import { html, LitElement, type PropertyValues } from "lit";
 import { customElement, property, query } from "lit/decorators.js";
 import { ModelSelector } from "../dialogs/ModelSelector.js";
 import type { MessageEditor } from "./MessageEditor.js";
@@ -45,6 +45,7 @@ export class AgentInterface extends LitElement {
 	private _scrollContainer?: HTMLElement;
 	private _resizeObserver?: ResizeObserver;
 	private _unsubscribeSession?: () => void;
+	private _scrollPending = false;
 
 	public setInput(text: string, attachments?: Attachment[]) {
 		const update = () => {
@@ -65,25 +66,18 @@ export class AgentInterface extends LitElement {
 		return this;
 	}
 
-	override willUpdate(changedProperties: Map<string, any>) {
-		super.willUpdate(changedProperties);
-
+	override updated(changedProperties: PropertyValues) {
 		// Re-subscribe when session property changes
 		if (changedProperties.has("session")) {
 			this.setupSessionSubscription();
+			// Setup scroll container after render when session becomes available
+			if (this.session && !this._scrollContainer) {
+				this.updateComplete.then(() => this.setupScrollContainer());
+			}
 		}
 	}
 
-	override async connectedCallback() {
-		super.connectedCallback();
-
-		this.style.display = "flex";
-		this.style.flexDirection = "column";
-		this.style.height = "100%";
-		this.style.minHeight = "0";
-
-		// Wait for first render to get scroll container
-		await this.updateComplete;
+	private setupScrollContainer() {
 		this._scrollContainer = this.querySelector(".overflow-y-auto") as HTMLElement;
 
 		if (this._scrollContainer) {
@@ -103,6 +97,19 @@ export class AgentInterface extends LitElement {
 			// Set up scroll listener with better detection
 			this._scrollContainer.addEventListener("scroll", this._handleScroll);
 		}
+	}
+
+	override async connectedCallback() {
+		super.connectedCallback();
+
+		this.style.display = "flex";
+		this.style.flexDirection = "column";
+		this.style.height = "100%";
+		this.style.minHeight = "0";
+
+		// Wait for first render to get scroll container
+		await this.updateComplete;
+		this.setupScrollContainer();
 
 		// Subscribe to external session if provided
 		this.setupSessionSubscription();
@@ -181,6 +188,15 @@ export class AgentInterface extends LitElement {
 						this._streamingContainer.setMessage(ev.message, !isStreaming);
 					}
 					this.requestUpdate();
+					if (this._autoScroll && this._scrollContainer && !this._scrollPending) {
+						this._scrollPending = true;
+						requestAnimationFrame(() => {
+							if (this._scrollContainer) {
+								this._scrollContainer.scrollTop = this._scrollContainer.scrollHeight;
+							}
+							this._scrollPending = false;
+						});
+					}
 					break;
 			}
 		});
