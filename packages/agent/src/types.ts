@@ -153,8 +153,21 @@ export interface AgentToolResult<T> {
 // Callback for streaming tool execution updates
 export type AgentToolUpdateCallback<T = any> = (partialResult: AgentToolResult<T>) => void;
 
+/**
+ * Context passed to tools at execution time.
+ * Apps define their own context type and pass it when creating tools.
+ */
+export interface AgentToolContext {
+	// Base context is empty - apps extend with their own properties
+	[key: string]: unknown;
+}
+
 // AgentTool extends Tool but adds the execute function
-export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any> extends Tool<TParameters> {
+export interface AgentTool<
+	TParameters extends TSchema = TSchema,
+	TDetails = any,
+	TContext extends AgentToolContext = AgentToolContext,
+> extends Tool<TParameters> {
 	// A human-readable label for the tool to be displayed in UI
 	label: string;
 	execute: (
@@ -162,14 +175,17 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 		params: Static<TParameters>,
 		signal?: AbortSignal,
 		onUpdate?: AgentToolUpdateCallback<TDetails>,
+		ctx?: TContext,
 	) => Promise<AgentToolResult<TDetails>>;
 }
 
 // AgentContext is like Context but uses AgentTool
-export interface AgentContext {
+export interface AgentContext<TToolContext extends AgentToolContext = AgentToolContext> {
 	systemPrompt: string;
 	messages: AgentMessage[];
-	tools?: AgentTool<any>[];
+	tools?: AgentTool<any, any, TToolContext>[];
+	/** Context passed to tools at execution time */
+	toolContext?: TToolContext;
 }
 
 /**

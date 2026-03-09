@@ -17,6 +17,7 @@ import type {
 	AgentLoopConfig,
 	AgentMessage,
 	AgentTool,
+	AgentToolContext,
 	AgentToolResult,
 	StreamFn,
 } from "./types.js";
@@ -160,6 +161,7 @@ async function runLoop(
 					signal,
 					stream,
 					config.getSteeringMessages,
+					currentContext.toolContext,
 				);
 				toolResults.push(...toolExecution.toolResults);
 				steeringAfterTools = toolExecution.steeringMessages ?? null;
@@ -297,6 +299,7 @@ async function executeToolCalls(
 	signal: AbortSignal | undefined,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	getSteeringMessages?: AgentLoopConfig["getSteeringMessages"],
+	toolContext?: AgentToolContext,
 ): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
 	const results: ToolResultMessage[] = [];
@@ -321,15 +324,21 @@ async function executeToolCalls(
 
 			const validatedArgs = validateToolArguments(tool, toolCall);
 
-			result = await tool.execute(toolCall.id, validatedArgs, signal, (partialResult) => {
-				stream.push({
-					type: "tool_execution_update",
-					toolCallId: toolCall.id,
-					toolName: toolCall.name,
-					args: toolCall.arguments,
-					partialResult,
-				});
-			});
+			result = await tool.execute(
+				toolCall.id,
+				validatedArgs,
+				signal,
+				(partialResult) => {
+					stream.push({
+						type: "tool_execution_update",
+						toolCallId: toolCall.id,
+						toolName: toolCall.name,
+						args: toolCall.arguments,
+						partialResult,
+					});
+				},
+				toolContext,
+			);
 		} catch (e) {
 			result = {
 				content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }],

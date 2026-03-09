@@ -20,6 +20,7 @@ import type {
 	AgentMessage,
 	AgentState,
 	AgentTool,
+	AgentToolContext,
 	StreamFn,
 	ThinkingLevel,
 } from "./types.js";
@@ -85,6 +86,12 @@ export interface AgentOptions {
 	 * Default: 60000 (60 seconds). Set to 0 to disable the cap.
 	 */
 	maxRetryDelayMs?: number;
+
+	/**
+	 * Context passed to tools at execution time.
+	 * Use getters for mutable state that tools need to access current values.
+	 */
+	toolContext?: AgentToolContext;
 }
 
 export class Agent {
@@ -115,6 +122,7 @@ export class Agent {
 	private resolveRunningPrompt?: () => void;
 	private _thinkingBudgets?: ThinkingBudgets;
 	private _maxRetryDelayMs?: number;
+	private _toolContext?: AgentToolContext;
 
 	constructor(opts: AgentOptions = {}) {
 		this._state = { ...this._state, ...opts.initialState };
@@ -127,6 +135,7 @@ export class Agent {
 		this.getApiKey = opts.getApiKey;
 		this._thinkingBudgets = opts.thinkingBudgets;
 		this._maxRetryDelayMs = opts.maxRetryDelayMs;
+		this._toolContext = opts.toolContext;
 	}
 
 	/**
@@ -171,6 +180,20 @@ export class Agent {
 	 */
 	set maxRetryDelayMs(value: number | undefined) {
 		this._maxRetryDelayMs = value;
+	}
+
+	/**
+	 * Get the current tool context.
+	 */
+	get toolContext(): AgentToolContext | undefined {
+		return this._toolContext;
+	}
+
+	/**
+	 * Set tool context passed to tools at execution time.
+	 */
+	set toolContext(value: AgentToolContext | undefined) {
+		this._toolContext = value;
 	}
 
 	get state(): AgentState {
@@ -351,6 +374,7 @@ export class Agent {
 			systemPrompt: this._state.systemPrompt,
 			messages: this._state.messages.slice(),
 			tools: this._state.tools,
+			toolContext: this._toolContext,
 		};
 
 		const config: AgentLoopConfig = {
