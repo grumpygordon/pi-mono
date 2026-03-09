@@ -204,13 +204,19 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 			);
 			const params = buildParams(model, context, isOAuthToken, options);
 			options?.onPayload?.(params);
+			const httpStart = Date.now();
 			const anthropicStream = client.messages.stream({ ...params, stream: true }, { signal: options?.signal });
 			stream.push({ type: "start", partial: output });
 
 			type Block = (ThinkingContent | TextContent | (ToolCall & { partialJson: string })) & { index: number };
 			const blocks = output.content as Block[];
 
+			let firstEventLogged = false;
 			for await (const event of anthropicStream) {
+				if (!firstEventLogged) {
+					console.log(`[pi-ai:anthropic:first_event] ${Date.now() - httpStart}ms`);
+					firstEventLogged = true;
+				}
 				if (event.type === "message_start") {
 					// Capture initial token usage from message_start event
 					// This ensures we have input token counts even if the stream is aborted early
@@ -354,6 +360,8 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 					calculateCost(model, output.usage);
 				}
 			}
+
+			console.log(`[pi-ai:anthropic:stream_complete] ${Date.now() - httpStart}ms`);
 
 			if (options?.signal?.aborted) {
 				throw new Error("Request was aborted");
