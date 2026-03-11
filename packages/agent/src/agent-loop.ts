@@ -154,6 +154,7 @@ async function runLoop(
 			hasMoreToolCalls = toolCalls.length > 0;
 
 			const toolResults: ToolResultMessage[] = [];
+			let shouldStopLoop = false;
 			if (hasMoreToolCalls) {
 				const toolExecution = await executeToolCalls(
 					currentContext.tools,
@@ -165,6 +166,7 @@ async function runLoop(
 				);
 				toolResults.push(...toolExecution.toolResults);
 				steeringAfterTools = toolExecution.steeringMessages ?? null;
+				shouldStopLoop = toolExecution.stopLoop ?? false;
 
 				for (const result of toolResults) {
 					currentContext.messages.push(result);
@@ -173,6 +175,13 @@ async function runLoop(
 			}
 
 			stream.push({ type: "turn_end", message, toolResults });
+
+			// Exit loop if a tool requested stop
+			if (shouldStopLoop) {
+				stream.push({ type: "agent_end", messages: newMessages });
+				stream.end(newMessages);
+				return;
+			}
 
 			// Get steering messages after turn completes
 			if (steeringAfterTools && steeringAfterTools.length > 0) {
@@ -300,10 +309,11 @@ async function executeToolCalls(
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	getSteeringMessages?: AgentLoopConfig["getSteeringMessages"],
 	toolContext?: AgentToolContext,
-): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
+): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[]; stopLoop?: boolean }> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
 	const results: ToolResultMessage[] = [];
 	let steeringMessages: AgentMessage[] | undefined;
+	let stopLoop = false;
 
 	for (let index = 0; index < toolCalls.length; index++) {
 		const toolCall = toolCalls[index];
@@ -369,6 +379,16 @@ async function executeToolCalls(
 		stream.push({ type: "message_start", message: toolResultMessage });
 		stream.push({ type: "message_end", message: toolResultMessage });
 
+		// Check if tool requested to stop the loop
+		if (result.stopLoop) {
+			stopLoop = true;
+			const remainingCalls = toolCalls.slice(index + 1);
+			for (const skipped of remainingCalls) {
+				results.push(skipToolCall(skipped, stream));
+			}
+			break;
+		}
+
 		// Check for steering messages - skip remaining tools if user interrupted
 		if (getSteeringMessages) {
 			const steering = await getSteeringMessages();
@@ -383,7 +403,7 @@ async function executeToolCalls(
 		}
 	}
 
-	return { toolResults: results, steeringMessages };
+	return { toolResults: results, steeringMessages, stopLoop };
 }
 
 function skipToolCall(
