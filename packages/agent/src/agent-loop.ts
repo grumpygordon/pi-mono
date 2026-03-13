@@ -208,6 +208,12 @@ async function runLoop(
 	stream.end(newMessages);
 }
 
+// Synchronous debug logging with real timestamps
+const agentLog = (msg: string) => {
+	const ts = new Date().toISOString();
+	process.stderr.write(`[${ts}] [agent-loop] ${msg}\n`);
+};
+
 /**
  * Stream an assistant response from the LLM.
  * This is where AgentMessage[] gets transformed to Message[] for the LLM.
@@ -222,11 +228,17 @@ async function streamAssistantResponse(
 	// Apply context transform if configured (AgentMessage[] → AgentMessage[])
 	let messages = context.messages;
 	if (config.transformContext) {
+		agentLog(`transformContext start, messageCount=${messages.length}`);
+		const t0 = Date.now();
 		messages = await config.transformContext(messages, signal);
+		agentLog(`transformContext done in ${Date.now() - t0}ms, messageCount=${messages.length}`);
 	}
 
 	// Convert to LLM-compatible messages (AgentMessage[] → Message[])
+	agentLog(`convertToLlm start`);
+	const t1 = Date.now();
 	const llmMessages = await config.convertToLlm(messages);
+	agentLog(`convertToLlm done in ${Date.now() - t1}ms, llmMessageCount=${llmMessages.length}`);
 
 	// Build LLM context
 	const llmContext: Context = {
@@ -235,22 +247,36 @@ async function streamAssistantResponse(
 		tools: context.tools,
 	};
 
+	// Estimate payload size for debugging
+	agentLog(`serializing llmContext for size check...`);
+	const t1b = Date.now();
+	const payloadSize = JSON.stringify(llmContext).length;
+	agentLog(`llmContext size: ${(payloadSize / 1024 / 1024).toFixed(2)}MB (serialized in ${Date.now() - t1b}ms)`);
+
 	const streamFunction = streamFn || streamSimple;
 
 	// Resolve API key (important for expiring tokens)
 	const resolvedApiKey =
 		(config.getApiKey ? await config.getApiKey(config.model.provider) : undefined) || config.apiKey;
 
+	agentLog(`calling streamFunction...`);
+	const t2 = Date.now();
 	const response = await streamFunction(config.model, llmContext, {
 		...config,
 		apiKey: resolvedApiKey,
 		signal,
 	});
+	agentLog(`streamFunction returned iterator in ${Date.now() - t2}ms, awaiting first event...`);
 
 	let partialMessage: AssistantMessage | null = null;
 	let addedPartial = false;
+	let firstEvent = true;
 
 	for await (const event of response) {
+		if (firstEvent) {
+			agentLog(`first event received in ${Date.now() - t2}ms, type=${event.type}`);
+			firstEvent = false;
+		}
 		switch (event.type) {
 			case "start":
 				partialMessage = event.partial;
@@ -315,9 +341,13 @@ async function executeToolCalls(
 	let steeringMessages: AgentMessage[] | undefined;
 	let stopLoop = false;
 
+	agentLog(`executeToolCalls start, toolCount=${toolCalls.length}`);
+
 	for (let index = 0; index < toolCalls.length; index++) {
 		const toolCall = toolCalls[index];
 		const tool = tools?.find((t) => t.name === toolCall.name);
+
+		agentLog(`tool[${index}] ${toolCall.name} start, id=${toolCall.id}`);
 
 		stream.push({
 			type: "tool_execution_start",
@@ -334,6 +364,7 @@ async function executeToolCalls(
 
 			const validatedArgs = validateToolArguments(tool, toolCall);
 
+			const t0 = Date.now();
 			result = await tool.execute(
 				toolCall.id,
 				validatedArgs,
@@ -349,7 +380,9 @@ async function executeToolCalls(
 				},
 				toolContext,
 			);
+			agentLog(`tool[${index}] ${toolCall.name} execute done in ${Date.now() - t0}ms`);
 		} catch (e) {
+			agentLog(`tool[${index}] ${toolCall.name} error: ${e instanceof Error ? e.message : String(e)}`);
 			result = {
 				content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }],
 				details: {},
@@ -357,6 +390,7 @@ async function executeToolCalls(
 			isError = true;
 		}
 
+		agentLog(`tool[${index}] ${toolCall.name} pushing tool_execution_end`);
 		stream.push({
 			type: "tool_execution_end",
 			toolCallId: toolCall.id,
@@ -378,6 +412,7 @@ async function executeToolCalls(
 		results.push(toolResultMessage);
 		stream.push({ type: "message_start", message: toolResultMessage });
 		stream.push({ type: "message_end", message: toolResultMessage });
+		agentLog(`tool[${index}] ${toolCall.name} complete`);
 
 		// Check if tool requested to stop the loop
 		if (result.stopLoop) {
@@ -403,6 +438,7 @@ async function executeToolCalls(
 		}
 	}
 
+	agentLog(`executeToolCalls done, resultCount=${results.length}`);
 	return { toolResults: results, steeringMessages, stopLoop };
 }
 
