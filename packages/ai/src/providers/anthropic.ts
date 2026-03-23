@@ -220,6 +220,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 				if (event.type === "message_start") {
 					// Capture initial token usage from message_start event
 					// This ensures we have input token counts even if the stream is aborted early
+					output.id = event.message.id;
 					output.usage.input = event.message.usage.input_tokens || 0;
 					output.usage.output = event.message.usage.output_tokens || 0;
 					output.usage.cacheRead = event.message.usage.cache_read_input_tokens || 0;

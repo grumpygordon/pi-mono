@@ -156,6 +156,7 @@ export interface UserMessage {
 
 export interface AssistantMessage {
 	role: "assistant";
+	id?: string;
 	content: (TextContent | ThinkingContent | ToolCall)[];
 	api: Api;
 	provider: Provider;
